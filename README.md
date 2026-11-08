@@ -38,8 +38,8 @@ Race orientation parameters may also be provided to the author for updating the 
 ### Potential future features
 
 * Druid forms are not currently supported.
-* Ranged weapons do not have animation support.
-* Full support for all races.
+* Ranged weapons do not have attack animation support.
+* Model orientation support for all races.
 * Class/spell specific animations.
 * More fleshed out animation sequences for weapons and casts.
 * Support for non-combat abilities like fishing or cooking.
