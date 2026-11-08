@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: FPWeapons
+## Notes: Renders an animated 3D model of your currently equipped weapon in first person. 
+## Author: iguanoman
+## Version: 1.0.0-alpha
+## X-Curse-Project-ID: 
+## SavedVariables: FPWeaponsRaceDB
+## SavedVariablesPerCharacter: FPWeaponsDB
+
+FPWeapons.lua
