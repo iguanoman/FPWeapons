@@ -1,11 +1,13 @@
-## Interface: 16001
+## Interface: 16001, 120100
 ## Title: FPWeapons
 ## Notes: Renders an animated 3D model of your currently equipped weapon in first person. 
 ## Author: iguanoman
 ## Version: 1.0.1
 ## X-Curse-Project-ID: 1790065
-## X-Credits: Utilizes code from Gob Nuked 'Em 3D by Radio Free Hub City (MIT) - github.com/Radio-Free-Hub-City/GobNukedEm3D
+## X-Credits: Partial code utilization from Gob Nuked 'Em 3D by Radio Free Hub City (MIT) - github.com/Radio-Free-Hub-City/GobNukedEm3D
 ## SavedVariables: FPWeaponsRaceDB
 ## SavedVariablesPerCharacter: FPWeaponsDB
 
+FPWeapons_RaceDefaults.lua
 FPWeapons.lua
+
