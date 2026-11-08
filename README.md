@@ -1,33 +1,60 @@
-# GobNukedEm3D
+# First Person Weapons
 
-GobNukedEm3D transforms your World of Warcraft gameplay into an immersive, retro-style First-Person Shooter experience. Designed with dynamic 3D weapon rendering, combat recoil, and character-bound camera controls, this lightweight addon brings authentic FPS combat dynamics directly into the game engine.
+First Person Weapons is an immersive addon that aims to provide more animated effects to the first person view in World of Warcraft. Utilizing in game model rendering and animations, the goal is to make the game feel very close to other first person RPGs. It is HIGHLY recommended to use this addon alongside the "Action Combat Mode" addon with the minimum zoom and crosshair set to 0 for best experience. It should also be noted that races other than Skyborne may experience slightly off model/animation orientation by default, but this can be modified for each race in the configuration menu at the user's discretion.
 
-> **Control Modifications Removed**
-The control modifications never really worked the way I wanted it to
----
+Please be aware that this addon is in a very early state and may not work as intended as it has not been tested in every scenario. Please report all LUA errors and bugs encountered with a bug report. Race orientation parameters may also be provided for updating the defaults in future patches.
 
 ### Key Features
 
-* **True FPS Camera Mode:** Instantly zooms into first-person view, locks camera alignment behind your view axis, and rebinds $A$/$D$ for true WASD strafe movement.
-* **Floating 3D Weapon Models:** Displays fully rendered 3D weapon models directly on screen without displaying character meshes or causing frame clipping.
-* **Weapon-Specific Recoil & Combos:** Dynamic attack animations triggered on spellcasts and auto-attacks, featuring multi-hit swing combos for melee weapons, heavy cleaves for 2H arms, spell pulses for staves, and kickback recoil for firearms.
-* **Auto Weapon Detect & Custom Overrides:** Automatically detects and displays your equipped weapon, while allowing custom Item ID/Link overrides per weapon type.
-* **Walking Bobbing:** Optional movement-based head/weapon bobbing with customizable intensity sliders.
-* **Per-Hand & Per-Type Tuning:** Customize scale, rotation, and XYZ offsets for Mainhand and Offhand slots, saved separately per weapon category (Guns, Bows, 1H Melee, 2H Melee, Caster Weapons, Staves, Shields).
-* **Taint-Safe & Combat Secure:** Built with custom, un-templated UI elements to prevent combat action blocks and protect game execution threads.
+* **Fully rendered 3D Models:** Displays fully rendered 3D weapon models directly on screen using in-game characters, items and animations.
+* **Transmog Support:** Works with transmogrified weapon models, applied effects and enchantments (experimental).
+* **Automatic First Person:** Will automatically display weapons when zoomed all the way in to first person and disable when zooming out.
+* **Weapon Specific Animations and Main Hand/Off Hand combos:** Every weapon type will use its own animations for idling, attacking, and casting. Certain weapons will combo with others to change the animation. 
+* **Auto Weapon Detect** Automatically detects what weapons you are using and assigns them appropriately - can be overridden in settings. 
+* **Walk Sway:** Optional movement-based head/weapon bobbing with customizable intensity sliders.
+* **Per-Hand & Per-Type Settings:** Customize roll, pitch, yaw, and XYZ offsets for Mainhand and Offhand slots and attack/cast pose animations. Saved separately per weapon category and for race/gender combo (1H Melee, 2H Melee, Caster Weapon, Caster Hand, Shields, Offhand Weapons, and Ranged Weapons)
+* **Auto Weapon Detect** Automatically detects what weapons you are using and assigns them appropriately - can be overridden in settings. 
 
 ---
 
 ### Slash Commands
 
-* `/gn3d` or `/gobnuked` – Toggles FPS Mode on or off.
-* `/gn3d config` – Opens or closes the configuration settings panel.
+* `/fpw` – Toggles first person weapon mode on or off.
+* `/fpw config` – Opens or closes the configuration settings panel.
+* `/fpw ignorelast` – Opens or closes the configuration settings panel.
+* `/fpw sheathe`– Switches the “Sheathe out of combat” option on or off, the same as the Sheathe / Draw key.
+* `/fpw ignorelast` –	Stops the last spell that made your weapons swing from doing so again. 
+* `/fpw ignore <spellID>` –	Ignores spell from animating
+* `/fpw unignore <spellID>` –	Removes a spell from the ignore list.
+* `/fpw ignored` – Lists the ignored spells.
 
-### Known Bugs
+---
 
-* Does not currently properly detect transmog appearances
+### Potential future features
+
+* Druid forms are not currently supported.
+* Ranged weapons do not have animation support.
+* Full support for all races.
+* Class/spell specific animations.
+* More fleshed out animation sequences for weapons and casts.
+* Support for non-combat abilities like fishing or cooking.
+
+### Known Issues / Bugs
+
+* When first loading in the model may load in an odd way, but the addon will refresh it into the right orientation automatically.
+* If models do not load, please check the Sheathe toggle to see how it is configured or try /reload.  
+* Animations for some weapons are not 100% tested and may experience model clipping.
+* Weapon attack animations may not line up correctly with auto-attacks due to combat log restrictions. Current system utilizes weapon speed and haste modifiers.
+* Movement sway set past default high may increase chances of model clipping.
+* Transmog appearances require a reload or an applied weapon effect to properly render sometimes.
+* If you encounter a bug not listed here, please enter a bug report. If you encounter LUA errors please use BugSack to provide the error messages.
+
 
 ### Changelog
 
-1.0.1 - Removed control remapping, fixed camera view in first person
 1.0.0 - Initial release
+
+### Credit
+
+Credit Radio Hub Free City's addon Gob Nuked 'Em 3D for inspiration and granting permission for forking and modification.
+
