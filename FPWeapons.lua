@@ -1,8 +1,6 @@
 --[[ FP Weapons
-     First-person weapons, hands and arms for World of Warcraft Forever.
-     by iguanoman
-     Additional credit to Radio Free Hub City
-]]
+     First-person weapons, hands and arms for World of Warcraft.
+     by iguanoman ]]
 local addonName = ...
 
 --==[ Settings & defaults ]=====================================================
@@ -82,7 +80,9 @@ Anim.SPEED_BY_TYPE = {
 }
 
 
+---@return table<string, any>
 local function NewSettings()
+    ---@type table<string, any>
     local db = {
         showEnchants = true,
         autoSheath = true,
@@ -713,8 +713,7 @@ Scene.auto = {
 function Scene.auto.Info(slot)
     local okI, id = pcall(GetInventoryItemID, "player", slot)
     if not okI or not id then return nil end
-    local f = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
-    local ok, _, _, _, equipLoc, _, classID, subID = pcall(f, id)
+    local ok, _, _, _, equipLoc, _, classID, subID = pcall(C_Item and C_Item.GetItemInfoInstant, id)
     if not ok then return nil end
     return classID, subID, equipLoc
 end
@@ -868,7 +867,7 @@ GetPose = function(hand)
     local saved = FPWeaponsDB[listKey]
 
     -- Where a pose starts before you've moved it: the most specific default that exists
-    local base, poseKey
+    local base, poseKey = nil, ty .. "_ARM"
     if Scene.Active() then
         -- ModelScene hand/arm mode has its own units, so its own poses (saved as TYPE_SCENE)
         base = (Scene.RaceDefault and Scene.RaceDefault(hand, ty))
@@ -1407,6 +1406,16 @@ function Scene.Probe()
 end
 
 -- The appearance (and weapon illusion) shown on an equipment slot, as transmog source IDs
+-- The first of these names an enum table has (enum names differ between client builds)
+function Scene.EnumValue(enum, ...)
+    if type(enum) ~= "table" then return nil end
+    for i = 1, select("#", ...) do
+        local v = enum[select(i, ...)]
+        if v ~= nil then return v end
+    end
+    return nil
+end
+
 -- Asks the game which transmog is applied to a slot. Since patch 12.0 the lookup returns one
 -- table instead of separate values; both forms are handled.
 function Scene.AppliedTransmog(slot, kind)
@@ -1414,11 +1423,11 @@ function Scene.AppliedTransmog(slot, kind)
     local function num(v)
         if type(v) == "number" and not issecretvalue(v) and v > 0 then return v end
     end
-    local M = Enum and Enum.TransmogModification
-    local mod = M and (M.Main or M.None) or 0
+    local mod = Scene.EnumValue(Enum and Enum.TransmogModification, "Main", "None") or 0
     local loc
-    if TransmogUtil and TransmogUtil.GetTransmogLocation then
-        local ok, l = pcall(TransmogUtil.GetTransmogLocation, slot, kind, mod)
+    local TU = rawget(_G, "TransmogUtil")   -- (Blizzard interface helper; may not exist on every client)
+    if TU and TU.GetTransmogLocation then
+        local ok, l = pcall(TU.GetTransmogLocation, slot, kind, mod)
         if ok then loc = l end
     end
     loc = loc or { slotID = slot, type = kind, modification = mod }
@@ -1431,8 +1440,8 @@ function Scene.AppliedTransmog(slot, kind)
             src = num(c)
         end
     end
-    if not src and TransmogUtil and TransmogUtil.GetInfoForEquippedSlot then
-        local ok, a = pcall(TransmogUtil.GetInfoForEquippedSlot, loc)
+    if not src and TU and TU.GetInfoForEquippedSlot then
+        local ok, a = pcall(TU.GetInfoForEquippedSlot, loc)
         if ok then src = num(type(a) == "table" and a.appliedSourceID or a) end
     end
     return src
@@ -1523,9 +1532,9 @@ end
 function Scene.ApplyAnimBlend(a)
     if not (a and a.SetAnimationBlendOperation) then return false end
     local ops = Enum and Enum.ModelBlendOperation
-    local on = FPWeaponsDB.animBlend ~= false
     local op
-    if on then op = ops and (ops.Anim or ops.Blend) or 1 else op = ops and ops.None or 0 end
+    if FPWeaponsDB.animBlend ~= false then op = Scene.EnumValue(ops, "Anim", "Blend") or 1
+    else op = Scene.EnumValue(ops, "None") or 0 end
     return pcall(a.SetAnimationBlendOperation, a, op)
 end
 
@@ -2246,8 +2255,7 @@ State.autoAttackWasOn = false
 Scene.AUTO_ATTACK = 6603   -- the Auto Attack spell
 local function IsAutoAttacking()
     if not (UnitAffectingCombat("player") and UnitExists("target")) then return false end
-    local active = (C_Spell and C_Spell.IsCurrentSpell) or IsCurrentSpell
-    local ok, on = pcall(active, Scene.AUTO_ATTACK)
+    local ok, on = pcall(C_Spell and C_Spell.IsCurrentSpell, Scene.AUTO_ATTACK)
     return (ok and on) and true or false
 end
 
@@ -2288,18 +2296,8 @@ local function CheckMeleeRange()
         if ok and (res == 1 or res == 0) then return res == 1 end  -- older API: 1 / 0
         return nil
     end
-    local r
-    if C_Spell and C_Spell.IsSpellInRange then
-        r = answer(pcall(C_Spell.IsSpellInRange, 6603, "target"))   -- Auto Attack
-    end
-    if r == nil and IsSpellInRange and GetSpellInfo then
-        local okN, name = pcall(GetSpellInfo, 6603)
-        if okN and type(name) == "string" then r = answer(pcall(IsSpellInRange, name, "target")) end
-    end
-    if r == nil then
-        local fn = (C_Item and C_Item.IsItemInRange) or IsItemInRange
-        if fn then r = answer(pcall(fn, Swing.RANGE_ITEM, "target")) end
-    end
+    local r = answer(pcall(C_Spell and C_Spell.IsSpellInRange, 6603, "target"))   -- Auto Attack
+    if r == nil then r = answer(pcall(C_Item and C_Item.IsItemInRange, Swing.RANGE_ITEM, "target")) end
     if r == nil then return true end  -- the game won't say either way: don't block swings
     return r
 end
@@ -2476,7 +2474,7 @@ overlayFrame:SetScript("OnUpdate", function(self, elapsed)
             -- the casting model is rebuilt only if the weapon combination's profile changed
             Scene.PlayAnim("MH")
             RefreshWeaponModels()
-            if Scene.RefreshPanel and FPWeaponsConfig and FPWeaponsConfig:IsShown() then Scene.RefreshPanel() end
+            if Scene.PanelShown and Scene.PanelShown() then Scene.RefreshPanel() end
             updated = true
         end
     end
@@ -2635,7 +2633,7 @@ function Scene.ParseCustomID(text)
     if type(text) ~= "string" or text == "" then return nil end
     local n = tonumber(text)
     if n then return (n > Scene.MODEL_FILE_ABOVE) and "model" or "item", n end
-    local item = GetItemInfoInstant(text)
+    local item = C_Item and C_Item.GetItemInfoInstant and C_Item.GetItemInfoInstant(text)
     if item then return "item", item end
     return nil
 end
@@ -3079,6 +3077,7 @@ local WEAPON_TYPES = {
 
 local RefreshPanel
 Scene.RefreshPanel = function() RefreshPanel() end  -- (for code above the panel)
+Scene.PanelShown = function() return optionsFrame:IsShown() end
 local LayoutPanel
 local panelLoading = false  -- true while sliders are being loaded from saved data (so loading never writes back)
 
@@ -3865,7 +3864,8 @@ local function ShouldAnimateForSpell(spellID)
     end
     -- Crafting while the profession window is open
     if ProfessionsFrame and ProfessionsFrame.IsShown and ProfessionsFrame:IsShown() then return false, "profession window is open" end
-    if TradeSkillFrame and TradeSkillFrame.IsShown and TradeSkillFrame:IsShown() then return false, "profession window is open" end
+    local oldTradeSkill = rawget(_G, "TradeSkillFrame")   -- (the profession window on older clients)
+    if oldTradeSkill and oldTradeSkill.IsShown and oldTradeSkill:IsShown() then return false, "profession window is open" end
 
     -- Mounts
     if C_MountJournal and C_MountJournal.GetMountFromSpell then
@@ -3930,13 +3930,13 @@ if hooksecurefunc and UseAction then
             return  -- mounts, companions, equipment sets, etc.
         end
         -- Ignore presses that can't happen right now (not usable / still on cooldown)
-        if IsUsableAction then
-            local okU, usable = pcall(IsUsableAction, slot)
-            if okU and not issecretvalue(usable) and usable == false then CastDebug("press slot " .. tostring(slot) .. ": not usable") return end
-        end
-        if GetActionCooldown then
-            local okC, start, duration = pcall(GetActionCooldown, slot)
-            if okC and type(start) == "number" and type(duration) == "number"
+        local okU, usable = pcall(C_ActionBar and C_ActionBar.IsUsableAction, slot)
+        if okU and not issecretvalue(usable) and usable == false then CastDebug("press slot " .. tostring(slot) .. ": not usable") return end
+        do
+            local okC, cd = pcall(C_ActionBar and C_ActionBar.GetActionCooldown, slot)
+            local start = okC and type(cd) == "table" and cd.startTime
+            local duration = okC and type(cd) == "table" and cd.duration
+            if type(start) == "number" and type(duration) == "number"
                and not issecretvalue(start) and not issecretvalue(duration)
                and start > 0 and duration > 1.6 then
                 CastDebug("press slot " .. tostring(slot) .. ": on cooldown")
@@ -4157,7 +4157,7 @@ listener:SetScript("OnEvent", function(self, event, ...)
         -- weapon (or spec) changed: auto-detected types may differ now
         ResetSwingTimers()
         if State.fpOn then C_Timer.After(0.25, function() Scene.Probe(); RefreshWeaponModels() end) end
-        if optionsFrame:IsShown() then C_Timer.After(0.3, RefreshPanel) end
+        if optionsFrame:IsShown() then C_Timer.After(0.3, Scene.RefreshPanel) end
     elseif event == "PLAYER_ENTERING_WORLD" then
         State.sheathBlend = (UnitAffectingCombat("player") or FPWeaponsDB.autoSheath == false) and 0 or 1
         State.drawTimer = 0
