@@ -1,6 +1,8 @@
 --[[ FP Weapons
-     First-person weapons, hands and arms for World of Warcraft.
-     by iguanoman ]]
+     First-person weapons, hands and arms for World of Warcraft Forever.
+     by iguanoman
+     Additional credit to Radio Free Hub City
+]]
 local addonName = ...
 
 --==[ Settings & defaults ]=====================================================
