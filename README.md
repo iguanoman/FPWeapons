@@ -49,6 +49,7 @@ Race orientation parameters may also be provided to the author for updating the 
 * When first loading in the model may load in an odd way, but the addon will refresh it into the right orientation automatically.
 * If models do not load, please check the Sheathe toggle to see how it is configured or try /reload.  
 * Animations for some weapons are not 100% tested and may experience model clipping.
+* Models may appear too close due to limited FOV - The FOV is restricted to 90 in the game client, please make sure it is adjusted to maximum.
 * Weapon attack animations may not line up correctly with auto-attacks due to combat log restrictions. Current system utilizes weapon speed and haste modifiers.
 * Movement sway set past default high may increase chances of model clipping.
 * Transmog appearances require a reload or an applied weapon effect to properly render sometimes.
