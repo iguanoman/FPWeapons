@@ -1,4 +1,4 @@
-## Interface: 16001, 120100
+## Interface: 16001, 120105
 ## Title: FPWeapons
 ## Notes: Renders an animated 3D model of your currently equipped weapon in first person. 
 ## Author: iguanoman

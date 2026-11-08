@@ -1,13 +1,12 @@
 # First Person Weapons
 
-First Person Weapons is an immersive addon that aims to provide more animated effects to the first person view in World of Warcraft. Utilizing in game model rendering and animations, the goal is to make the game feel very close to other first person RPGs. Currently being developed for Forever.
+First Person Weapons is an immersive addon that aims to provide more animated effects to the first person view in World of Warcraft. Utilizing in game model rendering and animations, the goal is to make the game feel very close to other first person RPGs. Currently being developed for Forever, but an option for Retail is available for testing.
 
 It is HIGHLY recommended to use this addon alongside the "Action Combat Mode" addon with the minimum zoom and crosshair set to 0 for best experience. It should also be noted that races other than Skyborne may experience slightly off model/animation orientation by default, but this can be modified for each race in the configuration menu at the user's discretion.
 
-Please be aware that this addon is in a very early state and may not work as intended as it has not been tested in every scenario. 
-Please report all LUA errors and bugs encountered with a bug report. 
+Please be aware that this addon is in a very early state and may not work as intended as it has not been tested in every scenario. Please report all LUA errors and bugs encountered with a bug report. 
 
-Race orientation parameters may also be provided to the author for updating the defaults in future patches.
+Race orientation parameters may also be provided to the author for updating the defaults in future patches. Retail models will not be a priority, but can be added in future since Forever and Retail are running the same engine.
 
 ### Key Features
 

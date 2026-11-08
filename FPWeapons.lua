@@ -148,7 +148,7 @@ local Scene = {
     RETRY_TIMES = { 0.25, 0.6, 1.0, 1.6, 2.4, 3.5 },  -- re-apply checks while a model loads
     LOGIN_REBUILDS = { 5 },     -- seconds after loading in: rebuild the hand/arm models from scratch
     MISSING_REBUILD = 1.5,      -- if item data wasn't ready during a build, rebuild after this long
-    missingTries = 0,           -- (max 4 such rebuilds in a row)
+    missingTries = {},          -- [hand] = such rebuilds in a row (max 4 per hand)
     ready = {},             -- true once an actor has loaded + been dressed (until then it's hidden)
     fade = {},              -- 0..1 fade-in after loading
     FADE_TIME = 0.15,       -- seconds to fade a freshly loaded model in
@@ -160,6 +160,7 @@ local Scene = {
     MOTION_ROT = 0.5,       -- swing/sheathe rotation is scaled by this
     LIGHT_SIGN = -1,        -- flip to 1 if the model looks lit from behind
     SLEEVE_SLOTS = { 4, 5, 9, 10 },  -- shirt, chest, wrist, hands: so the arm and sleeve aren't bare
+    LOOK_SLOTS = { 16, 17, 18, 4, 5, 9, 10 },  -- slots whose transmogged look is read: weapons and sleeve
     -- Starting transforms in hand/arm mode (used until you change them with the sliders)
     DEFAULTS = {
         MH = { scale = 1.0, facing = 3.14, pitch = 0.0, roll = 0.0, posX = 0.0, posY = -0.1, posZ = -0.4 },
@@ -1373,28 +1374,48 @@ function Scene.SourceFor(item)
     return nil
 end
 
+-- An item's own look; for a worn item, its exact version (item link) first, then the plain item
+function Scene.WornSource(itemID, invSlot)
+    local link = invSlot and Readable(GetInventoryItemLink("player", invSlot))
+    return (link and Scene.SourceFor(link)) or Scene.SourceFor(itemID)
+end
+
 -- The appearance (and weapon illusion) transmogged onto an equipment slot, as transmog source IDs.
 -- Each slot has a "transmog location"; the applied source is what other players see.
 -- TRANSMOG: what each weapon slot looks like, read off the invisible copy of your character.
 -- [slot] = { src = appearance source ID, ill = illusion source ID }
 Scene.tmog = {}
 Scene.lastProbe = -10
+Scene.tmogBlank = {}   -- [slot] = the last read gave no answer
 function Scene.ProbeRead()
     local a = Scene.probe
     if not (a and a.GetItemTransmogInfo) then return end
     local function num(v)
         if type(v) == "number" and not issecretvalue(v) and v > 0 then return v end
     end
+    if a.IsLoaded and not a:IsLoaded() then return end   -- (still loading: try again at the next read)
     local changed = false
-    for _, slot in ipairs({ 16, 17, 18 }) do
+    for _, slot in ipairs(Scene.LOOK_SLOTS) do
         local ok, info = pcall(a.GetItemTransmogInfo, a, slot)
         local src = ok and type(info) == "table" and num(info.appearanceID) or nil
         local ill = ok and type(info) == "table" and num(info.illusionID) or nil
-        local old = Scene.tmog[slot]
-        if (old and old.src) ~= src or (old and old.ill) ~= ill then changed = true end
-        Scene.tmog[slot] = src and { src = src, ill = ill } or nil
+        -- No answer while a weapon is worn may mean "couldn't read it" rather than "no transmog":
+        -- only believe it when two reads in a row say so (an answer that comes and goes would
+        -- otherwise rebuild the hand every time)
+        local blank = not src and GetInventoryItemID("player", slot)
+        local sure = not blank or Scene.tmogBlank[slot]
+        Scene.tmogBlank[slot] = blank or nil
+        if sure then
+            local old = Scene.tmog[slot]
+            if (old and old.src) ~= src or (old and old.ill) ~= ill then changed = true end
+            Scene.tmog[slot] = src and { src = src, ill = ill } or nil
+        end
     end
-    if changed and State.fpOn then RefreshWeaponModels(true) end
+    if changed and State.fpOn then
+        Scene.probeRebuild = true   -- (this rebuild needn't read the copy again)
+        RefreshWeaponModels(true, "transmog read from your character changed")
+        Scene.probeRebuild = nil
+    end
 end
 -- Rebuild the copy from your character, then read it once it has loaded
 function Scene.Probe()
@@ -1448,14 +1469,27 @@ function Scene.AppliedTransmog(slot, kind)
 end
 
 -- The appearance (and weapon illusion) shown on an equipment slot, as transmog source IDs:
--- the game's own answer first, then what the invisible copy of your character is wearing
+-- what the invisible copy of your character is actually wearing first, then the game's answer.
+-- (Since Midnight's transmog outfits, a weapon slot keeps a separate look for each kind of
+-- weapon - one-handed, two-handed, Titan's Grip... - and the game's answer can be the look
+-- saved for a different kind than the one you're holding. The copy shows the real one.)
 function Scene.Transmog(slot)
     if not slot then return nil, nil end
+    local pt = Scene.tmog[slot]
+    if pt and pt.src then return pt.src, pt.ill end
     local T = Enum and Enum.TransmogType
     local look = T and Scene.AppliedTransmog(slot, T.Appearance or 0)
     local illusion = T and Scene.AppliedTransmog(slot, T.Illusion or 1)
-    local pt = Scene.tmog[slot]
-    return look or (pt and pt.src) or nil, illusion or (pt and pt.ill) or nil
+    return look or nil, illusion or nil
+end
+
+-- What's in the weapon slots and whether each has a temporary effect on it (not how long is left)
+function Scene.WeaponSignature()
+    local r = { pcall(GetWeaponEnchantInfo) }
+    local sig = tostring(r[1] and Readable(r[2])) .. tostring(r[1] and Readable(r[5])) .. ":"
+             .. tostring(r[1] and Readable(r[6])) .. tostring(r[1] and Readable(r[9]))
+    for _, slot in ipairs({ 16, 17, 18 }) do sig = sig .. "|" .. tostring(Readable(GetInventoryItemLink("player", slot))) end
+    return sig
 end
 
 function Scene.IllusionFor(enchantID)
@@ -1569,32 +1603,33 @@ end
 function Scene.Render(hand, itemID, enchantID, weapons, invSlot)
     local a = Scene.actors[hand]
     if not a then return end
-    local w0 = Scene.Tmog({ src = Scene.SourceFor(itemID), illusion = Scene.IllusionFor(enchantID) }, invSlot)
+    local w0 = Scene.Tmog({ src = Scene.WornSource(itemID, invSlot), illusion = Scene.IllusionFor(enchantID) }, invSlot)
     local p = { arm = {}, weapon = w0.src, illusion = w0.illusion, invSlot = invSlot, extra = {} }
     local missing = (itemID and not p.weapon)
     for _, w in ipairs(weapons or {}) do
-        local src = Scene.SourceFor(w.item)
-        if src then
-            p.extra[#p.extra + 1] = Scene.Tmog({ src = src, slot = w.slot, illusion = Scene.IllusionFor(w.enchant) }, w.invSlot)
-        else
-            missing = true
-        end
+        -- (the transmogged look counts too: the item's own look isn't always reported)
+        local e = Scene.Tmog({ src = Scene.WornSource(w.item, w.invSlot), slot = w.slot, illusion = Scene.IllusionFor(w.enchant) }, w.invSlot)
+        if e.src then p.extra[#p.extra + 1] = e else missing = true end
     end
     for _, slot in ipairs(Scene.SLEEVE_SLOTS) do
+        -- the transmogged look you're wearing, else the item's own look
         local link = GetInventoryItemLink("player", slot)
-        local src = Scene.SourceFor(link)
+        local src = link and (Scene.Transmog(slot) or Scene.WornSource(GetInventoryItemID("player", slot), slot))
         if src then p.arm[#p.arm + 1] = src elseif link then missing = true end
     end
     Scene.pending[hand] = p
     Scene.attack.active[hand] = nil  -- a rebuild cancels any attack animation in progress
     -- Item data not loaded yet (common right after logging in): rebuild once it has had time
-    if missing and Scene.missingTries < 4 then
-        Scene.missingTries = Scene.missingTries + 1
+    -- (counted per hand: some items never report a look, and a hand that builds fine mustn't
+    -- restart another hand's count, or the retries never stop)
+    local tries = Scene.missingTries[hand] or 0
+    if missing and tries < 4 then
+        Scene.missingTries[hand] = tries + 1
         C_Timer.After(Scene.MISSING_REBUILD, function()
-            if Scene.pending[hand] == p and Scene.Active() then RefreshWeaponModels(true) end
+            if Scene.pending[hand] == p and Scene.Active() then RefreshWeaponModels(true, hand .. " item data wasn't loaded") end
         end)
     elseif not missing then
-        Scene.missingTries = 0
+        Scene.missingTries[hand] = 0
     end
     -- Hide it while it loads and gets dressed, so the build steps aren't visible
     Scene.ready[hand], Scene.fade[hand], Scene.playing[hand], Scene.loaded[hand] = false, 0, nil, false
@@ -2506,9 +2541,16 @@ overlayFrame:SetScript("OnUpdate", function(self, elapsed)
         -- can also show up a moment after login / after it's applied), so check every second and
         -- rebuild any hand whose look changed
         local ek = tostring(SlotEffect(16)) .. ":" .. tostring(SlotEffect(17)) .. ":" .. tostring(SlotEffect(18))
-        for _, slot in ipairs({ 16, 17, 18 }) do
+        local T, gameKey = Enum and Enum.TransmogType, ""
+        for _, slot in ipairs(Scene.LOOK_SLOTS) do
             local look, ill = Scene.Transmog(slot)
             ek = ek .. "|" .. tostring(look) .. "/" .. tostring(ill)
+            if T then gameKey = gameKey .. "|" .. tostring(Scene.AppliedTransmog(slot, T.Appearance or 0)) end
+        end
+        -- the game's own answer changed (an outfit swap, say): read your character again
+        if gameKey ~= State.lastGameLookKey then
+            if State.lastGameLookKey and GetTime() - Scene.lastProbe > 2 then Scene.Probe() end
+            State.lastGameLookKey = gameKey
         end
         if ek ~= State.lastLookKey then
             State.lastLookKey = ek
@@ -2718,11 +2760,17 @@ local function BuildHand(modelFrame, slotID, force)
                     "look" .. tostring(look) .. "/" .. tostring(illusion) }
     if useHand then
         parts[#parts + 1] = "arm"
-        for _, slot in ipairs(Scene.SLEEVE_SLOTS) do parts[#parts + 1] = tostring(GetInventoryItemID("player", slot) or 0) end
+        for _, slot in ipairs(Scene.SLEEVE_SLOTS) do
+            parts[#parts + 1] = tostring(GetInventoryItemID("player", slot) or 0) .. "/" .. tostring((Scene.Transmog(slot)))
+        end
     end
     local key = table.concat(parts, ":")
 
     if not force and modelFrame.fpKey == key then return false end
+    if Swing.debugRebuild then
+        DEFAULT_CHAT_FRAME:AddMessage(("|cff00ff00[FPWeapons rebuild]|r %s (%s)\n  was: %s\n  now: %s"):format(
+            hand, tostring(Scene.rebuildWhy), tostring(modelFrame.fpKey), key))
+    end
     modelFrame.fpKey = key
 
     modelFrame:ClearModel()
@@ -2739,9 +2787,10 @@ local function BuildHand(modelFrame, slotID, force)
     return true
 end
 
-RefreshWeaponModels = function(force)
+RefreshWeaponModels = function(force, why)
     if not State.fpOn then return end
-    if force and GetTime() - Scene.lastProbe > 2 then Scene.Probe() end
+    Scene.rebuildWhy = force and (why or "forced") or "look changed"
+    if force and not Scene.probeRebuild and GetTime() - Scene.lastProbe > 2 then Scene.Probe() end
     local changedMH = BuildHand(mhWeapon, 16, force)
     local changedOH = BuildHand(ohWeapon, 17, force)
     local changedRW = BuildHand(rwWeapon, 18, force)
@@ -2768,6 +2817,10 @@ RefreshWeaponModels = function(force)
                 end
             end
             if force or not Scene.pending.CAST or Scene.castKey ~= key then
+                if Swing.debugRebuild then
+                    DEFAULT_CHAT_FRAME:AddMessage(("|cff00ff00[FPWeapons rebuild]|r casting model (%s)\n  was: %s\n  now: %s"):format(
+                        force and tostring(Scene.rebuildWhy) or (Scene.pending.CAST and "setup changed" or "not built yet"), tostring(Scene.castKey), key))
+                end
                 Scene.castKey = key
                 Scene.Render("CAST", nil, nil, weapons)
             end
@@ -3681,6 +3734,10 @@ SlashCmdList["FPWEAPONS"] = function(msg)
     elseif cmd == "sheathe" or cmd == "sheath" then
         Scene.ToggleSheath()  -- (for macros: /fpw sheathe)
         return
+    elseif cmd == "debugrebuild" then
+        Swing.debugRebuild = not Swing.debugRebuild
+        say("Rebuild debug " .. (Swing.debugRebuild and "ON - each time a hand's model is reloaded, chat says which hand, why, and what changed" or "OFF"))
+        return
     elseif cmd == "debugcombat" then
         Swing.debugCombat = not Swing.debugCombat
         say("Combat debug " .. (Swing.debugCombat and "ON - get hit, block and parry; each line shows what the game reported" or "OFF"))
@@ -4208,16 +4265,22 @@ listener:SetScript("OnEvent", function(self, event, ...)
         if State.fpOn then
             if event == "TRANSMOGRIFY_SUCCESS" or event == "TRANSMOGRIFY_UPDATE" or event == "TRANSMOGRIFY_CLOSE" then
                 -- new look on the same item: re-read it, then rebuild
-                C_Timer.After(0.3, function() Scene.Probe(); RefreshWeaponModels(true) end)
+                C_Timer.After(0.3, function() Scene.Probe(); RefreshWeaponModels(true, "transmog event") end)
             elseif event == "UNIT_INVENTORY_CHANGED" and arg1 == "player" then
                 -- Fires when a weapon effect (sharpening stone, oil, imbue...) is applied or wears off.
                 -- The game doesn't reliably say which effect is on the weapon, so rebuild the hands
                 -- from your character outright (bursts of these events give a single rebuild).
+                -- On retail this event also fires for many unrelated things, so only rebuild when a
+                -- weapon, or whether it has an effect on it, actually changed.
                 if not Scene.invRebuild then
                     Scene.invRebuild = true
                     C_Timer.After(0.4, function()
                         Scene.invRebuild = nil
-                        RefreshWeaponModels(true)
+                        local sig = Scene.WeaponSignature()
+                        if sig ~= Scene.lastWeaponSig then
+                            Scene.lastWeaponSig = sig
+                            RefreshWeaponModels(true, "weapon or weapon effect changed")
+                        end
                     end)
                 end
             elseif event == "PLAYER_EQUIPMENT_CHANGED" then
